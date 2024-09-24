@@ -2,6 +2,7 @@ package http
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -31,16 +32,22 @@ type tpIngest struct {
 	Data    [][]any  `json:"data" binding:"required"`
 }
 
-func NewClient(logger *service.Logger, target string, baseURL *url.URL, workspace, stream, apikey string) *Client {
+func NewClient(logger *service.Logger, target string, baseURL *url.URL, workspace, stream, apikey, username, password string) *Client {
 	ingestURL, _ := url.Parse(baseURL.String())
 	pingURL, _ := url.Parse(baseURL.String())
 
 	header := http.Header{}
+	header.Add("Content-Type", "application/json")
+
+	if len(username)+len(password) > 0 {
+		auth := username + ":" + password
+		header.Add("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(auth)))
+	}
+
 	if target == targetTimeplus {
 		ingestURL.Path = path.Join(ingestURL.Path, workspace, "api", tpAPIVersion, "streams", stream, "ingest")
 		pingURL.Path = path.Join(pingURL.Path, workspace, "api", "info")
 
-		header.Add("Content-Type", "application/json")
 		if len(apikey) > 0 {
 			header.Add("X-Api-Key", apikey)
 		}

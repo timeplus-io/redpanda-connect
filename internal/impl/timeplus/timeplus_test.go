@@ -127,6 +127,8 @@ func TestOutputTimeplusd(t *testing.T) {
 target: timeplusd
 url: http://localhost:3218
 stream: mystream
+username: default
+password: 
 `
 
 		conf, err := outputConfigSpec.ParseYAML(outputConfig, env)

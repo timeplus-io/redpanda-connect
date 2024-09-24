@@ -28,7 +28,9 @@ func init() {
 		Field(service.NewIntField("port").Optional().Description(fmt.Sprintf("[timeplus]: %d, [timeplusd]: %d", defaultTimeplusPort, defaultTimeplusdPort))).
 		Field(service.NewStringField("workspace").Optional().Description("ID of the workspace. Required if target is `timeplus`")).
 		Field(service.NewStringField("stream").Description("name of the stream")).
-		Field(service.NewStringField("apikey").Default("").Optional().Description("[timeplus] the API key")).
+		Field(service.NewStringField("apikey").Secret().Optional().Description("the API key")).
+		Field(service.NewStringField("username").Optional().Description("the username")).
+		Field(service.NewStringField("password").Secret().Optional().Description("the password")).
 		Field(service.NewBatchPolicyField("batching"))
 
 	if err := service.RegisterBatchOutput("timeplus", outputConfigSpec, newTimeplusOutput); err != nil {
@@ -119,9 +121,28 @@ func newTimeplusOutput(conf *service.ParsedConfig, mgr *service.Resources) (out 
 		return
 	}
 
-	apikey, err := conf.FieldString("apikey")
-	if err != nil {
-		return
+	var (
+		apikey   string
+		username string
+		password string
+	)
+	if conf.Contains("apikey") {
+		apikey, err = conf.FieldString("apikey")
+		if err != nil {
+			return
+		}
+	}
+	if conf.Contains("username") {
+		username, err = conf.FieldString("username")
+		if err != nil {
+			return
+		}
+	}
+	if conf.Contains("password") {
+		password, err = conf.FieldString("password")
+		if err != nil {
+			return
+		}
 	}
 
 	var workspace string
@@ -144,7 +165,7 @@ func newTimeplusOutput(conf *service.ParsedConfig, mgr *service.Resources) (out 
 	logger := mgr.Logger()
 	var client Writer
 
-	client = http.NewClient(logger, target, baseURL, workspace, stream, apikey)
+	client = http.NewClient(logger, target, baseURL, workspace, stream, apikey, username, password)
 
 	out = &timeplus{
 		target: target,
