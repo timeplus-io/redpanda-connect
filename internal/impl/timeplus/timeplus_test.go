@@ -17,7 +17,7 @@ func TestOutputTimeplus(t *testing.T) {
 url: http://localhost:8000
 stream: mystream
 `
-		conf, err := timeplusConfigSpec.ParseYAML(outputConfig, env)
+		conf, err := outputConfigSpec.ParseYAML(outputConfig, env)
 		require.NoError(t, err)
 
 		_, _, _, err = newTimeplusOutput(conf, service.MockResources())
@@ -31,7 +31,7 @@ workspace: default
 stream: mystream
 `
 
-		conf, err := timeplusConfigSpec.ParseYAML(outputConfig, env)
+		conf, err := outputConfigSpec.ParseYAML(outputConfig, env)
 		require.NoError(t, err)
 
 		out, _, _, err := newTimeplusOutput(conf, service.MockResources())
@@ -77,7 +77,7 @@ stream: test_rp
 apikey: 7v3fHptcgZBBkFyi4qpG1-scsUnrLbLLgA2PFXTy0H-bcqVBF5iPdU3KG1_k
 `
 
-		conf, err := timeplusConfigSpec.ParseYAML(outputConfig, env)
+		conf, err := outputConfigSpec.ParseYAML(outputConfig, env)
 		require.NoError(t, err)
 
 		out, _, _, err := newTimeplusOutput(conf, service.MockResources())
@@ -124,12 +124,12 @@ func TestOutputTimeplusd(t *testing.T) {
 
 	t.Run("Successful ingest data", func(t *testing.T) {
 		outputConfig := `
-protocol: timeplusd
-url: localhost
+target: timeplusd
+url: http://localhost:3218
 stream: mystream
 `
 
-		conf, err := timeplusConfigSpec.ParseYAML(outputConfig, env)
+		conf, err := outputConfigSpec.ParseYAML(outputConfig, env)
 		require.NoError(t, err)
 
 		out, _, _, err := newTimeplusOutput(conf, service.MockResources())

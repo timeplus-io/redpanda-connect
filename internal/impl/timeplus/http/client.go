@@ -11,6 +11,13 @@ import (
 	"github.com/redpanda-data/benthos/v4/public/service"
 )
 
+const (
+	tpAPIVersion                = "v1beta2"
+	timeplusdDAPIVersion        = "v1"
+	targetTimeplus       string = "timeplus"
+	targetTimeplusd      string = "timeplusd"
+)
+
 type Client struct {
 	logger    *service.Logger
 	ingestURL *url.URL
@@ -24,17 +31,22 @@ type tpIngest struct {
 	Data    [][]any  `json:"data" binding:"required"`
 }
 
-func NewClient(logger *service.Logger, baseURL *url.URL, workspace, stream, apikey string) *Client {
+func NewClient(logger *service.Logger, target string, baseURL *url.URL, workspace, stream, apikey string) *Client {
 	ingestURL, _ := url.Parse(baseURL.String())
 	pingURL, _ := url.Parse(baseURL.String())
 
-	ingestURL.Path = path.Join(ingestURL.Path, workspace, "api", "v1beta2", "streams", stream, "ingest")
-	pingURL.Path = path.Join(pingURL.Path, workspace, "api", "info")
-
 	header := http.Header{}
-	header.Add("Content-Type", "application/json")
-	if len(apikey) > 0 {
-		header.Add("X-Api-Key", apikey)
+	if target == targetTimeplus {
+		ingestURL.Path = path.Join(ingestURL.Path, workspace, "api", tpAPIVersion, "streams", stream, "ingest")
+		pingURL.Path = path.Join(pingURL.Path, workspace, "api", "info")
+
+		header.Add("Content-Type", "application/json")
+		if len(apikey) > 0 {
+			header.Add("X-Api-Key", apikey)
+		}
+	} else if target == targetTimeplusd {
+		ingestURL.Path = path.Join(ingestURL.Path, "timeplusd", timeplusdDAPIVersion, "ingest", "streams", stream)
+		pingURL.Path = path.Join(pingURL.Path, workspace, "api", "info")
 	}
 
 	return &Client{

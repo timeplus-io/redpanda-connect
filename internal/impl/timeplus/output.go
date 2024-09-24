@@ -8,12 +8,11 @@ import (
 
 	"github.com/redpanda-data/benthos/v4/public/service"
 	"github.com/redpanda-data/connect/v4/internal/impl/timeplus/http"
-	"github.com/redpanda-data/connect/v4/internal/impl/timeplus/proton"
 )
 
 const (
-	protocolTimeplus  string = "timeplus"
-	protocolTimeplusd string = "timeplusd"
+	targetTimeplus  string = "timeplus"
+	targetTimeplusd string = "timeplusd"
 
 	defaultTimeplusPort  = 80
 	defaultTimeplusdPort = 8463
@@ -24,10 +23,10 @@ var outputConfigSpec *service.ConfigSpec
 func init() {
 	outputConfigSpec = service.NewConfigSpec()
 	outputConfigSpec.
-		Field(service.NewStringEnumField("protocol", protocolTimeplus, protocolTimeplusd).Default(protocolTimeplus)).
+		Field(service.NewStringEnumField("target", targetTimeplus, targetTimeplusd).Default(targetTimeplus)).
 		Field(service.NewURLField("url").Examples("https://us.timeplus.cloud", "localhost")).
 		Field(service.NewIntField("port").Optional().Description(fmt.Sprintf("[timeplus]: %d, [timeplusd]: %d", defaultTimeplusPort, defaultTimeplusdPort))).
-		Field(service.NewStringField("workspace").Optional().Description("ID of the workspace. Required if protocol is `timeplus`")).
+		Field(service.NewStringField("workspace").Optional().Description("ID of the workspace. Required if target is `timeplus`")).
 		Field(service.NewStringField("stream").Description("name of the stream")).
 		Field(service.NewStringField("apikey").Default("").Optional().Description("[timeplus] the API key")).
 		Field(service.NewBatchPolicyField("batching"))
@@ -38,9 +37,9 @@ func init() {
 }
 
 type timeplus struct {
-	protocol string
-	stream   string
-	client   Writer
+	target string
+	stream string
+	client Writer
 }
 
 // Close implements service.Output
@@ -110,7 +109,7 @@ func newTimeplusOutput(conf *service.ParsedConfig, mgr *service.Resources) (out 
 		return
 	}
 
-	protocol, err := conf.FieldString("protocol")
+	target, err := conf.FieldString("target")
 	if err != nil {
 		return
 	}
@@ -125,32 +124,15 @@ func newTimeplusOutput(conf *service.ParsedConfig, mgr *service.Resources) (out 
 		return
 	}
 
-	var port int
 	var workspace string
-	if conf.Contains("port") {
-		port, err = conf.FieldInt("port")
-		if err != nil {
-			return
-		}
-	}
 
-	if protocol == protocolTimeplus {
-		port = defaultTimeplusPort
+	if target == targetTimeplus {
 		workspace, err = conf.FieldString("workspace")
 		if err != nil {
 			return
 		}
 		if len(workspace) == 0 {
-			err = errors.New("workspace is required for `timeplus` protocol")
-			return
-		}
-	} else if protocol == protocolTimeplusd {
-		port = defaultTimeplusdPort
-	}
-
-	if conf.Contains("port") {
-		port, err = conf.FieldInt("port")
-		if err != nil {
+			err = errors.New("workspace is required for `timeplus` target")
 			return
 		}
 	}
@@ -162,22 +144,12 @@ func newTimeplusOutput(conf *service.ParsedConfig, mgr *service.Resources) (out 
 	logger := mgr.Logger()
 	var client Writer
 
-	if protocol == protocolTimeplus {
-		client = http.NewClient(logger, baseURL, workspace, stream, apikey)
-	} else if protocol == protocolTimeplusd {
-		config := proton.DriverConfig{
-			Host:     baseURL.String(),
-			Port:     port,
-			User:     "default",
-			Password: "",
-		}
-		client = proton.NewDriver(logger, &config)
-	}
+	client = http.NewClient(logger, target, baseURL, workspace, stream, apikey)
 
 	out = &timeplus{
-		protocol: protocol,
-		stream:   stream,
-		client:   client,
+		target: target,
+		stream: stream,
+		client: client,
 	}
 
 	return
