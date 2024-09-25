@@ -3,7 +3,6 @@ package timeplus
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sort"
 
 	"github.com/redpanda-data/benthos/v4/public/service"
@@ -13,20 +12,46 @@ import (
 const (
 	targetTimeplus  string = "timeplus"
 	targetTimeplusd string = "timeplusd"
-
-	defaultTimeplusPort  = 80
-	defaultTimeplusdPort = 8463
 )
 
 var outputConfigSpec *service.ConfigSpec
 
 func init() {
-	outputConfigSpec = service.NewConfigSpec()
+	outputConfigSpec = service.NewConfigSpec().
+		Categories("Services").
+		Summary("Sends message to a Timeplus Enterprise stream").
+		Description(`
+This output can send message to Timeplus Enterprise Cloud, Timeplus Enterprise Onprem or directly to timeplusd.
+
+A sample config to send the data to Timeplus Enterprise Cloud
+` + "```yml" + `
+workspace: my_workspace_id
+stream: mystream
+apikey: fdsjklajfkldsajkl
+` + "```" + `
+
+A sample config to send the data to Timeplus Enterprise Onprem
+` + "```yml" + `
+url: http://localhost:8000
+workspace: my_workspace_id
+stream: mystream
+username: timeplusd
+password: timeplusd
+` + "```" + `
+
+A sample config to send the data to timeplusd
+` + "```yml" + `
+url: http://localhost:3218
+stream: mystream
+username: timeplusd
+password: timeplusd
+` + "```" + `
+`)
+
 	outputConfigSpec.
 		Field(service.NewStringEnumField("target", targetTimeplus, targetTimeplusd).Default(targetTimeplus)).
 		Field(service.NewURLField("url").Examples("https://us.timeplus.cloud", "localhost")).
-		Field(service.NewIntField("port").Optional().Description(fmt.Sprintf("[timeplus]: %d, [timeplusd]: %d", defaultTimeplusPort, defaultTimeplusdPort))).
-		Field(service.NewStringField("workspace").Optional().Description("ID of the workspace. Required if target is `timeplus`")).
+		Field(service.NewStringField("workspace").Optional().Description("ID of the workspace. Required if target is `timeplus`.")).
 		Field(service.NewStringField("stream").Description("name of the stream")).
 		Field(service.NewStringField("apikey").Secret().Optional().Description("the API key")).
 		Field(service.NewStringField("username").Optional().Description("the username")).
