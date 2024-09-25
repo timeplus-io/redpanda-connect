@@ -24,28 +24,50 @@ func init() {
 		Description(`
 This output can send message to Timeplus Enterprise Cloud, Timeplus Enterprise Onprem or directly to timeplusd.
 
+This output accepts structured message only. It also expects all message contains the same keys that matches the schema of stream. If the upstream source returns
+unstructured message such as string, please include a processors to contruct the strcuture message. Here is a short sample
+
+` + "```yml" + `
+output:
+  timeplus:
+    workspace: my_workspace_id
+    stream: mystream
+    apikey: fdsjklajfkldsajkl
+
+	processors:
+	  - mapping: |
+        root = {}
+        root.raw = content().string()
+` + "```" + `
+
 A sample config to send the data to Timeplus Enterprise Cloud
 ` + "```yml" + `
-workspace: my_workspace_id
-stream: mystream
-apikey: fdsjklajfkldsajkl
+output:
+  timeplus:
+    workspace: my_workspace_id
+    stream: mystream
+    apikey: fdsjklajfkldsajkl
 ` + "```" + `
 
 A sample config to send the data to Timeplus Enterprise Onprem
 ` + "```yml" + `
-url: http://localhost:8000
-workspace: my_workspace_id
-stream: mystream
-username: timeplusd
-password: timeplusd
+output:
+  timeplus:
+    url: http://localhost:8000
+    workspace: my_workspace_id
+    stream: mystream
+    username: timeplusd
+    password: timeplusd
 ` + "```" + `
 
 A sample config to send the data to timeplusd
 ` + "```yml" + `
-url: http://localhost:3218
-stream: mystream
-username: timeplusd
-password: timeplusd
+output:
+  timeplus:
+    url: http://localhost:3218
+    stream: mystream
+    username: timeplusd
+    password: timeplusd
 ` + "```" + `
 `)
 
@@ -103,30 +125,23 @@ func (t *timeplus) WriteBatch(ctx context.Context, b service.MessageBatch) error
 		keys := []string{}
 		data := []any{}
 
-		if msgStructure, err := msg.AsStructured(); err != nil {
-			// As bytes
-			bytes, err := msg.AsBytes()
-			if err != nil {
-				continue
-			}
+		msgStructure, err := msg.AsStructured()
+		if err != nil {
+			continue
+		}
 
-			keys = append(keys, "raw")
-			data = append(data, string(bytes))
-		} else {
-			// As structured
-			msgJSON, OK := msgStructure.(map[string]any)
-			if !OK {
-				continue
-			}
+		msgJSON, OK := msgStructure.(map[string]any)
+		if !OK {
+			continue
+		}
 
-			for key := range msgJSON {
-				keys = append(keys, key)
-			}
-			sort.Strings(keys)
+		for key := range msgJSON {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
 
-			for _, key := range keys {
-				data = append(data, msgJSON[key])
-			}
+		for _, key := range keys {
+			data = append(data, msgJSON[key])
 		}
 
 		rows = append(rows, data)

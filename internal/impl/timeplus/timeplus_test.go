@@ -69,33 +69,6 @@ stream: mystream
 		require.NoError(t, err)
 	})
 
-	t.Run("Successful send raw to local timeplusd", func(t *testing.T) {
-		outputConfig := `
-url: http://localhost:8000
-workspace: default
-stream: rawstream
-`
-
-		conf, err := outputConfigSpec.ParseYAML(outputConfig, env)
-		require.NoError(t, err)
-
-		out, _, _, err := newTimeplusOutput(conf, service.MockResources())
-		require.NoError(t, err)
-
-		err = out.Connect(context.Background())
-		require.NoError(t, err)
-
-		batch := service.MessageBatch{
-			service.NewMessage([]byte("hello ")),
-			service.NewMessage([]byte("world")),
-		}
-		err = out.WriteBatch(context.Background(), batch)
-		require.NoError(t, err)
-
-		err = out.Close(context.Background())
-		require.NoError(t, err)
-	})
-
 	t.Run("Successful send data to remote timeplusd", func(t *testing.T) {
 		outputConfig := `
 url: https://nextgen.timeplus.cloud/

@@ -44,6 +44,7 @@ output:
     apikey: "" # No default (optional)
     username: "" # No default (optional)
     password: "" # No default (optional)
+    max_in_flight: 64
     batching:
       count: 0
       byte_size: 0
@@ -68,6 +69,7 @@ output:
     apikey: "" # No default (optional)
     username: "" # No default (optional)
     password: "" # No default (optional)
+    max_in_flight: 64
     batching:
       count: 0
       byte_size: 0
@@ -81,28 +83,50 @@ output:
 
 This output can send message to Timeplus Enterprise Cloud, Timeplus Enterprise Onprem or directly to timeplusd.
 
+This output accepts structured message only. It also expects all message contains the same keys that matches the schema of stream. If the upstream source returns
+unstructured message such as string, please include a processors to contruct the strcuture message. Here is a short sample
+
+```yml
+output:
+  timeplus:
+    workspace: my_workspace_id
+    stream: mystream
+    apikey: fdsjklajfkldsajkl
+
+	processors:
+	  - mapping: |
+        root = {}
+        root.raw = content().string()
+```
+
 A sample config to send the data to Timeplus Enterprise Cloud
 ```yml
-workspace: my_workspace_id
-stream: mystream
-apikey: fdsjklajfkldsajkl
+output:
+  timeplus:
+    workspace: my_workspace_id
+    stream: mystream
+    apikey: fdsjklajfkldsajkl
 ```
 
 A sample config to send the data to Timeplus Enterprise Onprem
 ```yml
-url: http://localhost:8000
-workspace: my_workspace_id
-stream: mystream
-username: timeplusd
-password: timeplusd
+output:
+  timeplus:
+    url: http://localhost:8000
+    workspace: my_workspace_id
+    stream: mystream
+    username: timeplusd
+    password: timeplusd
 ```
 
 A sample config to send the data to timeplusd
 ```yml
-url: http://localhost:3218
-stream: mystream
-username: timeplusd
-password: timeplusd
+output:
+  timeplus:
+    url: http://localhost:3218
+    stream: mystream
+    username: timeplusd
+    password: timeplusd
 ```
 
 
@@ -156,7 +180,7 @@ name of the stream
 
 === `apikey`
 
-the API key
+the API key. Required if you are sending message to Timeplus Enterprise Cloud
 [CAUTION]
 ====
 This field contains sensitive information that usually shouldn't be added to a config directly, read our xref:configuration:secrets.adoc[secrets page for more info].
@@ -187,6 +211,15 @@ This field contains sensitive information that usually shouldn't be added to a c
 
 *Type*: `string`
 
+
+=== `max_in_flight`
+
+The maximum number of messages to have in flight at a given time. Increase this to improve throughput.
+
+
+*Type*: `int`
+
+*Default*: `64`
 
 === `batching`
 
