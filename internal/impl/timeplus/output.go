@@ -17,6 +17,7 @@ const (
 var outputConfigSpec *service.ConfigSpec
 
 func init() {
+	// TODO: add Version
 	outputConfigSpec = service.NewConfigSpec().
 		Categories("Services").
 		Summary("Sends message to a Timeplus Enterprise stream").
@@ -53,9 +54,10 @@ password: timeplusd
 		Field(service.NewURLField("url").Examples("https://us.timeplus.cloud", "localhost")).
 		Field(service.NewStringField("workspace").Optional().Description("ID of the workspace. Required if target is `timeplus`.")).
 		Field(service.NewStringField("stream").Description("name of the stream")).
-		Field(service.NewStringField("apikey").Secret().Optional().Description("the API key")).
+		Field(service.NewStringField("apikey").Secret().Optional().Description("the API key. Required if you are sending message to Timeplus Enterprise Cloud")).
 		Field(service.NewStringField("username").Optional().Description("the username")).
 		Field(service.NewStringField("password").Secret().Optional().Description("the password")).
+		Field(service.NewOutputMaxInFlightField()).
 		Field(service.NewBatchPolicyField("batching"))
 
 	if err := service.RegisterBatchOutput("timeplus", outputConfigSpec, newTimeplusOutput); err != nil {
@@ -64,8 +66,6 @@ password: timeplusd
 }
 
 type timeplus struct {
-	target string
-	stream string
 	client Writer
 }
 
@@ -97,40 +97,46 @@ func (t *timeplus) WriteBatch(ctx context.Context, b service.MessageBatch) error
 
 	cols := []string{}
 	rows := [][]any{}
+
+	// Here we assume all messages have the same structure, same keys
 	for _, msg := range b {
-		msgStructure, err := msg.AsStructured()
-		if err != nil {
-			continue
-		}
-
-		msgJSON, OK := msgStructure.(map[string]any)
-		if !OK {
-			continue
-		}
-
 		keys := []string{}
 		data := []any{}
-		for key := range msgJSON {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
 
-		for _, key := range keys {
-			data = append(data, msgJSON[key])
+		if msgStructure, err := msg.AsStructured(); err != nil {
+			// As bytes
+			bytes, err := msg.AsBytes()
+			if err != nil {
+				continue
+			}
+
+			keys = append(keys, "raw")
+			data = append(data, string(bytes))
+		} else {
+			// As structured
+			msgJSON, OK := msgStructure.(map[string]any)
+			if !OK {
+				continue
+			}
+
+			for key := range msgJSON {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+
+			for _, key := range keys {
+				data = append(data, msgJSON[key])
+			}
 		}
 
 		rows = append(rows, data)
-
-		// Here we assume all messages have the same keys
 		cols = keys
 	}
 
-	return t.client.Write(t.stream, cols, rows)
+	return t.client.Write(ctx, cols, rows)
 }
 
 func newTimeplusOutput(conf *service.ParsedConfig, mgr *service.Resources) (out service.BatchOutput, batchPolicy service.BatchPolicy, maxInFlight int, err error) {
-	maxInFlight = 1
-
 	baseURL, err := conf.FieldURL("url")
 	if err != nil {
 		return
@@ -186,15 +192,16 @@ func newTimeplusOutput(conf *service.ParsedConfig, mgr *service.Resources) (out 
 	if batchPolicy, err = conf.FieldBatchPolicy("batching"); err != nil {
 		return
 	}
+	if maxInFlight, err = conf.FieldMaxInFlight(); err != nil {
+		return
+	}
 
 	logger := mgr.Logger()
 	var client Writer
 
-	client = http.NewClient(logger, target, baseURL, workspace, stream, apikey, username, password)
+	client = http.NewClient(logger, maxInFlight, target, baseURL, workspace, stream, apikey, username, password)
 
 	out = &timeplus{
-		target: target,
-		stream: stream,
 		client: client,
 	}
 

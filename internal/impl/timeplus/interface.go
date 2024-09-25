@@ -1,5 +1,7 @@
 package timeplus
 
+import "context"
+
 type Writer interface {
-	Write(stream string, cols []string, rows [][]any) error
+	Write(ctx context.Context, cols []string, rows [][]any) error
 }

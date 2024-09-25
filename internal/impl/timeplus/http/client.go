@@ -2,6 +2,7 @@ package http
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"path"
 
 	"github.com/redpanda-data/benthos/v4/public/service"
+	"golang.org/x/sync/semaphore"
 )
 
 const (
@@ -22,9 +24,9 @@ const (
 type Client struct {
 	logger    *service.Logger
 	ingestURL *url.URL
-	pingURL   *url.URL
 	header    http.Header
 	client    *http.Client
+	sem       *semaphore.Weighted
 }
 
 type tpIngest struct {
@@ -32,9 +34,8 @@ type tpIngest struct {
 	Data    [][]any  `json:"data" binding:"required"`
 }
 
-func NewClient(logger *service.Logger, target string, baseURL *url.URL, workspace, stream, apikey, username, password string) *Client {
+func NewClient(logger *service.Logger, maxInFlight int, target string, baseURL *url.URL, workspace, stream, apikey, username, password string) *Client {
 	ingestURL, _ := url.Parse(baseURL.String())
-	pingURL, _ := url.Parse(baseURL.String())
 
 	header := http.Header{}
 	header.Add("Content-Type", "application/json")
@@ -46,26 +47,24 @@ func NewClient(logger *service.Logger, target string, baseURL *url.URL, workspac
 
 	if target == targetTimeplus {
 		ingestURL.Path = path.Join(ingestURL.Path, workspace, "api", tpAPIVersion, "streams", stream, "ingest")
-		pingURL.Path = path.Join(pingURL.Path, workspace, "api", "info")
 
 		if len(apikey) > 0 {
 			header.Add("X-Api-Key", apikey)
 		}
 	} else if target == targetTimeplusd {
 		ingestURL.Path = path.Join(ingestURL.Path, "timeplusd", timeplusdDAPIVersion, "ingest", "streams", stream)
-		pingURL.Path = path.Join(pingURL.Path, workspace, "api", "info")
 	}
 
 	return &Client{
 		logger,
 		ingestURL,
-		pingURL,
 		header,
 		&http.Client{},
+		semaphore.NewWeighted(int64(maxInFlight)),
 	}
 }
 
-func (c *Client) Write(stream string, cols []string, rows [][]any) error {
+func (c *Client) Write(ctx context.Context, cols []string, rows [][]any) error {
 	payload := tpIngest{
 		Columns: cols,
 		Data:    rows,
@@ -82,6 +81,11 @@ func (c *Client) Write(stream string, cols []string, rows [][]any) error {
 	}
 	req.Header = c.header
 
+	if err := c.sem.Acquire(ctx, 1); err != nil {
+		return err
+	}
+
+	defer c.sem.Release(1)
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return err

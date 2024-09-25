@@ -95,6 +95,7 @@ workspace: my_workspace_id
 stream: mystream
 username: timeplusd
 password: timeplusd
+```
 
 A sample config to send the data to timeplusd
 ```yml
