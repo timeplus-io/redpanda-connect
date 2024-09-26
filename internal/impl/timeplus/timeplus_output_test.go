@@ -2,6 +2,10 @@ package timeplus
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -24,12 +28,26 @@ stream: mystream
 		require.ErrorContains(t, err, "workspace")
 	})
 
-	t.Run("Successful send data to local timeplusd", func(t *testing.T) {
-		outputConfig := `
-url: http://localhost:8000
+	t.Run("Successful send data to local timeplus enterprise", func(t *testing.T) {
+		ch := make(chan bool)
+		svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			require.Equal(t, http.MethodPost, req.Method)
+			require.Equal(t, "/default/api/v1beta2/streams/mystream/ingest", req.RequestURI)
+
+			body, err := io.ReadAll(req.Body)
+			require.NoError(t, err)
+			require.Equal(t, "{\"columns\":[\"col1\",\"col2\",\"col3\"],\"data\":[[\"hello\",5,50],[\"world\",10,100]]}", string(body))
+
+			require.Equal(t, "application/json", req.Header.Get("Content-Type"))
+
+			close(ch)
+		}))
+
+		outputConfig := fmt.Sprintf(`
+url: %s
 workspace: default
 stream: mystream
-`
+`, svr.URL)
 
 		conf, err := outputConfigSpec.ParseYAML(outputConfig, env)
 		require.NoError(t, err)
@@ -65,17 +83,35 @@ stream: mystream
 		err = out.WriteBatch(context.Background(), batch)
 		require.NoError(t, err)
 
+		<-ch
+
 		err = out.Close(context.Background())
 		require.NoError(t, err)
 	})
 
-	t.Run("Successful send data to remote timeplusd", func(t *testing.T) {
-		outputConfig := `
-url: https://nextgen.timeplus.cloud/
+	t.Run("Successful send data to remote timeplus enterprise", func(t *testing.T) {
+		ch := make(chan bool)
+		svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+
+			require.Equal(t, http.MethodPost, req.Method)
+			require.Equal(t, "/nextgen/api/v1beta2/streams/test_rp/ingest", req.RequestURI)
+
+			body, err := io.ReadAll(req.Body)
+			require.NoError(t, err)
+			require.Equal(t, "{\"columns\":[\"col1\",\"col2\",\"col3\",\"col4\"],\"data\":[[\"hello\",5,false,3.14],[\"world\",10,true,3.1415926]]}", string(body))
+
+			require.Equal(t, "application/json", req.Header.Get("Content-Type"))
+			require.Equal(t, "7v3fHptcgZBBkFyi4qpG1-scsUnrLbLLgA2PFXTy0H-bcqVBF5iPdU3KG1_k", req.Header.Get("X-Api-Key"))
+
+			close(ch)
+		}))
+
+		outputConfig := fmt.Sprintf(`
+url: %s
 workspace: nextgen
 stream: test_rp
 apikey: 7v3fHptcgZBBkFyi4qpG1-scsUnrLbLLgA2PFXTy0H-bcqVBF5iPdU3KG1_k
-`
+`, svr.URL)
 
 		conf, err := outputConfigSpec.ParseYAML(outputConfig, env)
 		require.NoError(t, err)
@@ -113,6 +149,8 @@ apikey: 7v3fHptcgZBBkFyi4qpG1-scsUnrLbLLgA2PFXTy0H-bcqVBF5iPdU3KG1_k
 		err = out.WriteBatch(context.Background(), batch)
 		require.NoError(t, err)
 
+		<-ch
+
 		err = out.Close(context.Background())
 		require.NoError(t, err)
 	})
@@ -123,13 +161,29 @@ func TestOutputTimeplusd(t *testing.T) {
 	env := service.NewEnvironment()
 
 	t.Run("Successful ingest data", func(t *testing.T) {
-		outputConfig := `
+		ch := make(chan bool)
+		svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+
+			require.Equal(t, http.MethodPost, req.Method)
+			require.Equal(t, "/timeplusd/v1/ingest/streams/mystream", req.RequestURI)
+
+			body, err := io.ReadAll(req.Body)
+			require.NoError(t, err)
+			require.Equal(t, "{\"columns\":[\"col1\"],\"data\":[[\"hello\"],[\"world\"]]}", string(body))
+
+			require.Equal(t, "application/json", req.Header.Get("Content-Type"))
+			require.Equal(t, "Basic ZGVmYXVsdDpoZWxsbw==", req.Header.Get("Authorization"))
+
+			close(ch)
+		}))
+
+		outputConfig := fmt.Sprintf(`
 target: timeplusd
-url: http://localhost:3218
+url: %s
 stream: mystream
 username: default
-password: 
-`
+password: hello
+`, svr.URL)
 
 		conf, err := outputConfigSpec.ParseYAML(outputConfig, env)
 		require.NoError(t, err)
