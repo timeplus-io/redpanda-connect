@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"path"
@@ -43,6 +44,8 @@ func NewClient(logger *service.Logger, maxInFlight int, target string, baseURL *
 	if len(username)+len(password) > 0 {
 		auth := username + ":" + password
 		header.Add("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(auth)))
+
+		logger = logger.With("auth_method", "basic")
 	}
 
 	if target == TargetTimeplus {
@@ -50,10 +53,14 @@ func NewClient(logger *service.Logger, maxInFlight int, target string, baseURL *
 
 		if len(apikey) > 0 {
 			header.Add("X-Api-Key", apikey)
+			logger = logger.With("auth_method", "apikey")
 		}
 	} else if target == TargetTimeplusd {
 		ingestURL.Path = path.Join(ingestURL.Path, "timeplusd", timeplusdDAPIVersion, "ingest", "streams", stream)
 	}
+
+	logger = logger.With("target", TargetTimeplusd).With("host", ingestURL.Host).With("ingest_url", ingestURL.RequestURI())
+	logger.Info("timeplus http client created")
 
 	return &Client{
 		logger,
@@ -75,7 +82,7 @@ func (c *Client) Write(ctx context.Context, cols []string, rows [][]any) error {
 		return err
 	}
 
-	req, err := http.NewRequest("POST", c.ingestURL.String(), bytes.NewBuffer(payloadBytes))
+	req, err := http.NewRequest(http.MethodPost, c.ingestURL.String(), bytes.NewBuffer(payloadBytes))
 	if err != nil {
 		return err
 	}
@@ -90,11 +97,16 @@ func (c *Client) Write(ctx context.Context, cols []string, rows [][]any) error {
 	if err != nil {
 		return err
 	}
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return fmt.Errorf("failed to ingest, got status code %d", resp.StatusCode)
-	}
 
-	resp.Body.Close()
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		errorBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to ingest, got status code %d", resp.StatusCode)
+		}
+
+		return fmt.Errorf("failed to ingest, got status code %d, error %s", resp.StatusCode, errorBody)
+	}
 
 	return nil
 }

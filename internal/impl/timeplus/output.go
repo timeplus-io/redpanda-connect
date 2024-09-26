@@ -83,11 +83,12 @@ output:
 }
 
 type timeplus struct {
+	logger *service.Logger
 	client Writer
 }
 
 // Close implements service.Output
-func (t *timeplus) Close(ctx context.Context) error {
+func (t *timeplus) Close(context.Context) error {
 	// TODO: shall we wait for ongoing writes?
 	t.client = nil
 	return nil
@@ -118,11 +119,13 @@ func (t *timeplus) WriteBatch(ctx context.Context, b service.MessageBatch) error
 
 		msgStructure, err := msg.AsStructured()
 		if err != nil {
+			t.logger.Errorf("failed to get structured message %w, skipping this message", err)
 			continue
 		}
 
 		msgJSON, OK := msgStructure.(map[string]any)
 		if !OK {
+			t.logger.Errorf("expect map[string]any, got %T, skipping this message", msgJSON)
 			continue
 		}
 
@@ -143,6 +146,8 @@ func (t *timeplus) WriteBatch(ctx context.Context, b service.MessageBatch) error
 }
 
 func newTimeplusOutput(conf *service.ParsedConfig, mgr *service.Resources) (out service.BatchOutput, batchPolicy service.BatchPolicy, maxInFlight int, err error) {
+	logger := mgr.Logger()
+
 	baseURL, err := conf.FieldURL("url")
 	if err != nil {
 		return
@@ -202,13 +207,9 @@ func newTimeplusOutput(conf *service.ParsedConfig, mgr *service.Resources) (out 
 		return
 	}
 
-	logger := mgr.Logger()
-	var client Writer
-
-	client = http.NewClient(logger, maxInFlight, target, baseURL, workspace, stream, apikey, username, password)
-
 	out = &timeplus{
-		client: client,
+		logger: logger,
+		client: http.NewClient(logger, maxInFlight, target, baseURL, workspace, stream, apikey, username, password),
 	}
 
 	return
