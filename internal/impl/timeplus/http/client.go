@@ -15,10 +15,10 @@ import (
 )
 
 const (
-	tpAPIVersion                = "v1beta2"
+	timeplusAPIVersion          = "v1beta2"
 	timeplusdDAPIVersion        = "v1"
-	targetTimeplus       string = "timeplus"
-	targetTimeplusd      string = "timeplusd"
+	TargetTimeplus       string = "timeplus"
+	TargetTimeplusd      string = "timeplusd"
 )
 
 type Client struct {
@@ -45,13 +45,13 @@ func NewClient(logger *service.Logger, maxInFlight int, target string, baseURL *
 		header.Add("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(auth)))
 	}
 
-	if target == targetTimeplus {
-		ingestURL.Path = path.Join(ingestURL.Path, workspace, "api", tpAPIVersion, "streams", stream, "ingest")
+	if target == TargetTimeplus {
+		ingestURL.Path = path.Join(ingestURL.Path, workspace, "api", timeplusAPIVersion, "streams", stream, "ingest")
 
 		if len(apikey) > 0 {
 			header.Add("X-Api-Key", apikey)
 		}
-	} else if target == targetTimeplusd {
+	} else if target == TargetTimeplusd {
 		ingestURL.Path = path.Join(ingestURL.Path, "timeplusd", timeplusdDAPIVersion, "ingest", "streams", stream)
 	}
 

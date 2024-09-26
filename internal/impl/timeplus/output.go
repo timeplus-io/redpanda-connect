@@ -9,11 +9,6 @@ import (
 	"github.com/redpanda-data/connect/v4/internal/impl/timeplus/http"
 )
 
-const (
-	targetTimeplus  string = "timeplus"
-	targetTimeplusd string = "timeplusd"
-)
-
 var outputConfigSpec *service.ConfigSpec
 
 func init() {
@@ -24,20 +19,20 @@ func init() {
 		Description(`
 This output can send message to Timeplus Enterprise Cloud, Timeplus Enterprise Onprem or directly to timeplusd.
 
-This output accepts structured message only. It also expects all message contains the same keys that matches the schema of stream. If the upstream source returns
-unstructured message such as string, please include a processors to contruct the strcuture message. Here is a short sample
+This output accepts structured message only. It also expects all message contains the same keys and matches the schema of stream. If the upstream source returns
+unstructured message such as string, please include a processors to contruct the strcuture message. Here is a short sample:
 
 ` + "```yml" + `
 output:
   timeplus:
     workspace: my_workspace_id
     stream: mystream
-    apikey: fdsjklajfkldsajkl
+    apikey: JFmlmLDJPtrgo6cEgSDKHyg9NknZ5PM2M9lGelCwE2BtHPxlXnCbQaWua
 
 	processors:
 	  - mapping: |
         root = {}
-        root.raw = content().string()
+        root.raw = content().string() # Make sure your stream contains a string type raw field
 ` + "```" + `
 
 A sample config to send the data to Timeplus Enterprise Cloud
@@ -46,7 +41,7 @@ output:
   timeplus:
     workspace: my_workspace_id
     stream: mystream
-    apikey: fdsjklajfkldsajkl
+    apikey: JFmlmLDJPtrgo6cEgSDKHyg9NknZ5PM2M9lGelCwE2BtHPxlXnCbQaWua-9a
 ` + "```" + `
 
 A sample config to send the data to Timeplus Enterprise Onprem
@@ -56,8 +51,8 @@ output:
     url: http://localhost:8000
     workspace: my_workspace_id
     stream: mystream
-    username: timeplusd
-    password: timeplusd
+    username: username
+    password: pw
 ` + "```" + `
 
 A sample config to send the data to timeplusd
@@ -66,19 +61,19 @@ output:
   timeplus:
     url: http://localhost:3218
     stream: mystream
-    username: timeplusd
-    password: timeplusd
+    username: username
+    password: pw
 ` + "```" + `
 `)
 
 	outputConfigSpec.
-		Field(service.NewStringEnumField("target", targetTimeplus, targetTimeplusd).Default(targetTimeplus)).
-		Field(service.NewURLField("url").Examples("https://us.timeplus.cloud", "localhost")).
+		Field(service.NewStringEnumField("target", http.TargetTimeplus, http.TargetTimeplusd).Default(http.TargetTimeplus)).
+		Field(service.NewURLField("url").Description("The url should always include schema and host. The port number should be included as well if it is not 80.").Examples("https://us.timeplus.cloud", "http://localhost:8000")).
 		Field(service.NewStringField("workspace").Optional().Description("ID of the workspace. Required if target is `timeplus`.")).
-		Field(service.NewStringField("stream").Description("name of the stream")).
-		Field(service.NewStringField("apikey").Secret().Optional().Description("the API key. Required if you are sending message to Timeplus Enterprise Cloud")).
-		Field(service.NewStringField("username").Optional().Description("the username")).
-		Field(service.NewStringField("password").Secret().Optional().Description("the password")).
+		Field(service.NewStringField("stream").Description("The name of the stream. Make sure the schema of the stream matches the input")).
+		Field(service.NewStringField("apikey").Secret().Optional().Description("The API key. Required if you are sending message to Timeplus Enterprise Cloud")).
+		Field(service.NewStringField("username").Optional().Description("The username. Required if you are sending message to Timeplus Enterprise Onprem or timeplusd")).
+		Field(service.NewStringField("password").Secret().Optional().Description("The password. Required if you are sending message to Timeplus Enterprise Onprem or timeplusd")).
 		Field(service.NewOutputMaxInFlightField()).
 		Field(service.NewBatchPolicyField("batching"))
 
@@ -93,12 +88,8 @@ type timeplus struct {
 
 // Close implements service.Output
 func (t *timeplus) Close(ctx context.Context) error {
-	if t.client == nil {
-		return nil
-	}
-
+	// TODO: shall we wait for ongoing writes?
 	t.client = nil
-
 	return nil
 }
 
@@ -111,7 +102,6 @@ func (t *timeplus) Connect(context.Context) error {
 	return nil
 }
 
-// TODO: Handle AsBytes
 func (t *timeplus) WriteBatch(ctx context.Context, b service.MessageBatch) error {
 	if len(b) == 0 {
 		return nil
@@ -121,6 +111,7 @@ func (t *timeplus) WriteBatch(ctx context.Context, b service.MessageBatch) error
 	rows := [][]any{}
 
 	// Here we assume all messages have the same structure, same keys
+	// Currently we will just skip the message if it is invalid. Probably we should add a feature flag to not skip them by propagating the error
 	for _, msg := range b {
 		keys := []string{}
 		data := []any{}
@@ -193,7 +184,7 @@ func newTimeplusOutput(conf *service.ParsedConfig, mgr *service.Resources) (out 
 
 	var workspace string
 
-	if target == targetTimeplus {
+	if target == http.TargetTimeplus {
 		workspace, err = conf.FieldString("workspace")
 		if err != nil {
 			return
