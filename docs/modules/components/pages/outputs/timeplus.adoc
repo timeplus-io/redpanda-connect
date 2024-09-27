@@ -23,7 +23,7 @@
 component_type_dropdown::[]
 
 
-Sends message to a Timeplus Enterprise stream
+Sends message to a Timeplus Enterprise stream via ingest endpoint
 
 
 [tabs]
@@ -38,7 +38,7 @@ output:
   label: ""
   timeplus:
     target: timeplus
-    url: https://us.timeplus.cloud # No default (required)
+    url: https://us-west-2.timeplus.cloud
     workspace: "" # No default (optional)
     stream: "" # No default (required)
     apikey: "" # No default (optional)
@@ -63,7 +63,7 @@ output:
   label: ""
   timeplus:
     target: timeplus
-    url: https://us.timeplus.cloud # No default (required)
+    url: https://us-west-2.timeplus.cloud
     workspace: "" # No default (optional)
     stream: "" # No default (required)
     apikey: "" # No default (optional)
@@ -81,7 +81,7 @@ output:
 --
 ======
 
-This output can send message to Timeplus Enterprise Cloud, Timeplus Enterprise Onprem or directly to timeplusd.
+This output can send message to Timeplus Enterprise Cloud, Timeplus Enterprise (self-hosted) or directly to timeplusd.
 
 This output accepts structured message only. It also expects all message contains the same keys and matches the schema of stream. If the upstream source returns
 unstructured message such as string, please include a processors to contruct the strcuture message. Here is a short sample:
@@ -91,7 +91,7 @@ output:
   timeplus:
     workspace: my_workspace_id
     stream: mystream
-    apikey: JFmlmLDJPtrgo6cEgSDKHyg9NknZ5PM2M9lGelCwE2BtHPxlXnCbQaWua
+    apikey: <Api key genereated on web console>
 
 	processors:
 	  - mapping: |
@@ -105,10 +105,10 @@ output:
   timeplus:
     workspace: my_workspace_id
     stream: mystream
-    apikey: JFmlmLDJPtrgo6cEgSDKHyg9NknZ5PM2M9lGelCwE2BtHPxlXnCbQaWua-9a
+    apikey: <Api key genereated on web console>
 ```
 
-A sample config to send the data to Timeplus Enterprise Onprem
+A sample config to send the data to Timeplus Enterprise (self-hosted)
 ```yml
 output:
   timeplus:
@@ -134,7 +134,7 @@ output:
 
 === `target`
 
-Sorry! This field is missing documentation.
+The destination type, either Timeplus Enterprise or timeplusd
 
 
 *Type*: `string`
@@ -148,18 +148,19 @@ Options:
 
 === `url`
 
-The url should always include schema and host. The port number should be included as well if it is not 80.
+The url should always include schema and host.
 
 
 *Type*: `string`
 
+*Default*: `"https://us-west-2.timeplus.cloud"`
 
 ```yml
 # Examples
 
-url: https://us.timeplus.cloud
-
 url: http://localhost:8000
+
+url: http://127.0.0.1:3218
 ```
 
 === `workspace`
@@ -193,7 +194,7 @@ This field contains sensitive information that usually shouldn't be added to a c
 
 === `username`
 
-The username. Required if you are sending message to Timeplus Enterprise Onprem or timeplusd
+The username. Required if you are sending message to Timeplus Enterprise (self-hosted) or timeplusd
 
 
 *Type*: `string`
@@ -201,7 +202,7 @@ The username. Required if you are sending message to Timeplus Enterprise Onprem 
 
 === `password`
 
-The password. Required if you are sending message to Timeplus Enterprise Onprem or timeplusd
+The password. Required if you are sending message to Timeplus Enterprise (self-hosted) or timeplusd
 [CAUTION]
 ====
 This field contains sensitive information that usually shouldn't be added to a config directly, read our xref:configuration:secrets.adoc[secrets page for more info].

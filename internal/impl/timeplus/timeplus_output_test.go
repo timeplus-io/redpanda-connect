@@ -28,7 +28,7 @@ stream: mystream
 		require.ErrorContains(t, err, "workspace")
 	})
 
-	t.Run("Successful send data to local timeplus enterprise", func(t *testing.T) {
+	t.Run("Successful send data to local Timeplus Enterprise", func(t *testing.T) {
 		ch := make(chan bool)
 		svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			require.Equal(t, http.MethodPost, req.Method)
@@ -89,7 +89,7 @@ stream: mystream
 		require.NoError(t, err)
 	})
 
-	t.Run("Successful send data to remote timeplus enterprise", func(t *testing.T) {
+	t.Run("Successful send data to remote Timeplus Enterprise", func(t *testing.T) {
 		ch := make(chan bool)
 		svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 
