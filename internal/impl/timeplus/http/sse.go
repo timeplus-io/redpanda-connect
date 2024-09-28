@@ -5,7 +5,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -15,7 +17,25 @@ import (
 )
 
 type SSEClient struct {
-	header http.Header
+	header   http.Header
+	queryURL *url.URL
+	reader   *EventStreamReader
+	cols     []col
+	eventCH  chan []any
+	readErr  error
+}
+
+type query struct {
+	Result result `json:"result"`
+}
+
+type result struct {
+	Header []col `json:"header"`
+}
+
+type col struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
 }
 
 func NewSSEClient(logger *service.Logger, baseURL *url.URL, workspace, stream, apikey, username, password string) *SSEClient {
@@ -36,22 +56,117 @@ func NewSSEClient(logger *service.Logger, baseURL *url.URL, workspace, stream, a
 
 	queryURL.Path = path.Join(queryURL.Path, workspace, "api", timeplusAPIVersion, "queries")
 
-	logger = logger.With("host", queryURL.Host).With("ingest_url", queryURL.RequestURI())
+	logger = logger.With("host", queryURL.Host).With("query_url", queryURL.RequestURI())
 
 	return &SSEClient{
-		header: header,
+		header:   header,
+		queryURL: queryURL,
+		eventCH:  make(chan []any),
 	}
 }
 
 func (c *SSEClient) Run(ctx context.Context, sql string) error {
+	payload := map[string]string{
+		"sql": sql,
+	}
+
+	var body = new(bytes.Buffer)
+	if err := json.NewEncoder(body).Encode(payload); err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, c.queryURL.String(), body)
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+
+	// TODO: close resp
+	c.reader = NewEventStreamReader(resp.Body, 1024*1024)
+	ev, err := c.reader.ReadEvent()
+	if err != nil {
+		return err
+	}
+
+	if string(ev.Event) != "query" {
+		return fmt.Errorf("expect 'query', got %s", ev.Event)
+	}
+
+	q := query{}
+
+	if err := json.Unmarshal(ev.Data, &q); err != nil {
+		return err
+	}
+
+	c.cols = q.Result.Header
+
+	go func() {
+		defer close(c.eventCH)
+
+		for {
+			ev, err := c.reader.ReadEvent()
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					return
+				}
+
+				c.readErr = err
+				return
+			}
+
+			switch string(ev.Event) {
+			case "":
+				var events [][]any
+				if err := json.Unmarshal(ev.Data, &events); err != nil {
+					c.readErr = err
+					return
+				}
+
+				for _, ev := range events {
+					c.eventCH <- ev
+				}
+			default:
+				continue
+			}
+		}
+	}()
+
 	return nil
 }
 
 func (c *SSEClient) Read(ctx context.Context) (map[string]any, error) {
-	return nil, nil
+	if c.readErr != nil {
+		return nil, c.readErr
+	}
+
+	select {
+	case event := <-c.eventCH:
+		if len(event) != len(c.cols) {
+			return nil, fmt.Errorf("rows in cols %d doesn't match cols in header %d", len(event), len(c.cols))
+		}
+		msg := map[string]any{}
+
+		for i := range event {
+			msg[c.cols[i].Name] = event[i]
+		}
+
+		return msg, nil
+	case <-ctx.Done():
+		return nil, nil
+	default:
+		return nil, c.readErr
+	}
+
 }
 
 func (c *SSEClient) Close() error {
+	go func() {
+		close(c.eventCH)
+	}()
 	return nil
 }
 
@@ -137,10 +252,10 @@ func minPosInt(a, b int) int {
 }
 
 // ReadEvent scans the EventStream for events.
-func (e *EventStreamReader) ReadEvent() ([]byte, error) {
+func (e *EventStreamReader) ReadEvent() (*SSEEvent, error) {
 	if e.scanner.Scan() {
 		event := e.scanner.Bytes()
-		return event, nil
+		return processEvent(event)
 	}
 	if err := e.scanner.Err(); err != nil {
 		if err == context.Canceled {

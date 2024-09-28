@@ -10,6 +10,7 @@ import (
 
 	"github.com/redpanda-data/benthos/v4/public/service"
 	"github.com/redpanda-data/connect/v4/internal/impl/timeplus/driver"
+	"github.com/redpanda-data/connect/v4/internal/impl/timeplus/http"
 )
 
 var inputConfigSpec *service.ConfigSpec
@@ -51,12 +52,18 @@ func newTimeplusInput(conf *service.ParsedConfig, mgr *service.Resources) (servi
 		return nil, err
 	}
 
-	driver := driver.NewDriver(logger, addr.Host, username, password)
+	var reader Reader
+
+	if addr.Scheme == "tcp" {
+		reader = driver.NewDriver(logger, addr.Host, username, password)
+	} else {
+		reader = http.NewSSEClient(logger, addr, "test", "test", "hello", username, password)
+	}
 
 	return service.AutoRetryNacks(
 		&timeplusInput{
 			log:    logger,
-			reader: driver,
+			reader: reader,
 			sql:    sql,
 		}), nil
 }
