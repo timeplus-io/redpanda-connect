@@ -441,3 +441,7 @@ require (
 	modernc.org/strutil v1.2.0 // indirect
 	modernc.org/token v1.1.0 // indirect
 )
+
+toolchain go1.23.0
+
+replace github.com/redpanda-data/benthos/v4 => /Users/ye11ow/git/timeplus/benthos

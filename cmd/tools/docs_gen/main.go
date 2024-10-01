@@ -16,6 +16,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -27,6 +28,7 @@ import (
 	"github.com/redpanda-data/benthos/v4/public/bloblang"
 	"github.com/redpanda-data/benthos/v4/public/service"
 
+	"github.com/redpanda-data/connect/v4/internal/plugins"
 	"github.com/redpanda-data/connect/v4/public/schema"
 
 	_ "github.com/redpanda-data/connect/v4/public/components/all"
@@ -104,34 +106,150 @@ func main() {
 	flag.StringVar(&docsDir, "dir", docsDir, "The directory to write docs to")
 	flag.Parse()
 
-	getSchema().Environment().WalkInputs(viewForDir(path.Join(docsDir, "./inputs")))
-	getSchema().Environment().WalkBuffers(viewForDir(path.Join(docsDir, "./buffers")))
-	getSchema().Environment().WalkCaches(viewForDir(path.Join(docsDir, "./caches")))
-	getSchema().Environment().WalkMetrics(viewForDir(path.Join(docsDir, "./metrics")))
-	getSchema().Environment().WalkOutputs(viewForDir(path.Join(docsDir, "./outputs")))
-	getSchema().Environment().WalkProcessors(viewForDir(path.Join(docsDir, "./processors")))
-	getSchema().Environment().WalkRateLimits(viewForDir(path.Join(docsDir, "./rate_limits")))
-	getSchema().Environment().WalkTracers(viewForDir(path.Join(docsDir, "./tracers")))
-	getSchema().Environment().WalkScanners(viewForDir(path.Join(docsDir, "./scanners")))
+	input := map[string]any{}
+	inputSecrets := map[string][]string{}
+	output := map[string]any{}
+	outputSecrets := map[string][]string{}
+	drivers := map[string]any{}
 
+	plugins.BaseInfo.Hydrate(service.GlobalEnvironment())
+
+	getSchema().Environment().WalkInputs(func(name string, config *service.ConfigView) {
+		yaml, err := config.TemplateData()
+		if err != nil {
+			panic(err)
+		}
+
+		var (
+			support        string
+			commercialName string
+		)
+		for _, info := range plugins.BaseInfo {
+			if info.Type == plugins.TypeInput && info.Name == name {
+				support = info.Support
+				commercialName = info.CommercialName
+			}
+		}
+
+		input[name] = map[string]string{
+			"name":    commercialName,
+			"summary": yaml.Summary,
+			"yaml":    yaml.AdvancedConfigYAML,
+			"support": support,
+		}
+
+		secrets := config.Secrets()
+		if len(secrets) > 0 {
+			inputSecrets[name] = secrets
+		}
+	})
+
+	out, err := json.Marshal(input)
+	if err != nil {
+		panic(err)
+	}
+	fo, err := os.Create("input.json")
+	if err != nil {
+		panic(err)
+	}
+	fo.Write(out)
+
+	out, err = json.Marshal(inputSecrets)
+	if err != nil {
+		panic(err)
+	}
+	fo, err = os.Create("inputSecrets.json")
+	if err != nil {
+		panic(err)
+	}
+	fo.Write(out)
+
+	getSchema().Environment().WalkOutputs(func(name string, config *service.ConfigView) {
+		yaml, err := config.TemplateData()
+		if err != nil {
+			panic(err)
+		}
+
+		var (
+			support        string
+			commercialName string
+		)
+		for _, info := range plugins.BaseInfo {
+			if info.Type == plugins.TypeOutput && info.Name == name {
+				support = info.Support
+				commercialName = info.CommercialName
+			}
+		}
+
+		output[name] = map[string]string{
+			"name":    commercialName,
+			"summary": yaml.Summary,
+			"yaml":    yaml.AdvancedConfigYAML,
+			"support": support,
+		}
+
+		secrets := config.Secrets()
+		if len(secrets) > 0 {
+			outputSecrets[name] = secrets
+		}
+	})
+
+	out, err = json.Marshal(output)
+	if err != nil {
+		panic(err)
+	}
+	fo, err = os.Create("output.json")
+	if err != nil {
+		panic(err)
+	}
+	fo.Write(out)
+
+	out, err = json.Marshal(outputSecrets)
+	if err != nil {
+		panic(err)
+	}
+	fo, err = os.Create("outputSecrets.json")
+	if err != nil {
+		panic(err)
+	}
+	fo.Write(out)
+
+	for _, info := range plugins.BaseInfo {
+		if info.Type == plugins.TypeSQLDriver {
+			drivers[info.Name] = map[string]string{
+				"name":    info.CommercialName,
+				"support": info.Support,
+			}
+		}
+	}
+
+	out, err = json.Marshal(drivers)
+	if err != nil {
+		panic(err)
+	}
+	fo, err = os.Create("driver.json")
+	if err != nil {
+		panic(err)
+	}
+	fo.Write(out)
 	// Bloblang stuff
-	doBloblangMethods(docsDir)
-	doBloblangFunctions(docsDir)
+	// doBloblangMethods(docsDir)
+	// doBloblangFunctions(docsDir)
 
-	// Unit test docs
-	doTestDocs(docsDir)
+	// // Unit test docs
+	// doTestDocs(docsDir)
 
-	// HTTP docs
-	doHTTP(docsDir)
+	// // HTTP docs
+	// doHTTP(docsDir)
 
 	// Logger docs
-	doLogger(docsDir)
+	// doLogger(docsDir)
 
 	// Redpanda docs
-	doRedpanda(docsDir)
+	// doRedpanda(docsDir)
 
 	// Template docs
-	doTemplates(docsDir)
+	// doTemplates(docsDir)
 }
 
 func viewForDir(docsDir string) func(string, *service.ConfigView) {
