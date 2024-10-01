@@ -401,3 +401,5 @@ require (
 go 1.22.2
 
 toolchain go1.23.0
+
+replace github.com/redpanda-data/benthos/v4 => /Users/ye11ow/git/timeplus/benthos
