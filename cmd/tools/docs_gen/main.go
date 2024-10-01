@@ -16,6 +16,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -27,6 +28,7 @@ import (
 	"github.com/redpanda-data/benthos/v4/public/bloblang"
 	"github.com/redpanda-data/benthos/v4/public/service"
 
+	"github.com/redpanda-data/connect/v4/internal/plugins"
 	"github.com/redpanda-data/connect/v4/public/schema"
 
 	_ "github.com/redpanda-data/connect/v4/public/components/all"
@@ -104,15 +106,70 @@ func main() {
 	flag.StringVar(&docsDir, "dir", docsDir, "The directory to write docs to")
 	flag.Parse()
 
-	getSchema().Environment().WalkInputs(viewForDir(path.Join(docsDir, "./inputs")))
-	getSchema().Environment().WalkBuffers(viewForDir(path.Join(docsDir, "./buffers")))
-	getSchema().Environment().WalkCaches(viewForDir(path.Join(docsDir, "./caches")))
-	getSchema().Environment().WalkMetrics(viewForDir(path.Join(docsDir, "./metrics")))
-	getSchema().Environment().WalkOutputs(viewForDir(path.Join(docsDir, "./outputs")))
-	getSchema().Environment().WalkProcessors(viewForDir(path.Join(docsDir, "./processors")))
-	getSchema().Environment().WalkRateLimits(viewForDir(path.Join(docsDir, "./rate_limits")))
-	getSchema().Environment().WalkTracers(viewForDir(path.Join(docsDir, "./tracers")))
-	getSchema().Environment().WalkScanners(viewForDir(path.Join(docsDir, "./scanners")))
+	input := map[string]any{}
+	output := map[string]any{}
+
+	plugins.BaseInfo.Hydrate(service.GlobalEnvironment())
+
+	getSchema().Environment().WalkInputs(func(name string, config *service.ConfigView) {
+		yaml, err := config.TemplateData()
+		if err != nil {
+			panic(err)
+		}
+
+		var support string
+		for _, info := range plugins.BaseInfo {
+			if info.Name == name {
+				support = info.Support
+			}
+		}
+
+		input[name] = map[string]string{
+			"summary": yaml.Summary,
+			"yaml":    yaml.AdvancedConfigYAML,
+			"support": support,
+		}
+	})
+
+	out, err := json.Marshal(input)
+	if err != nil {
+		panic(err)
+	}
+	fo, err := os.Create("input.json")
+	if err != nil {
+		panic(err)
+	}
+	fo.Write(out)
+
+	getSchema().Environment().WalkOutputs(func(name string, config *service.ConfigView) {
+		yaml, err := config.TemplateData()
+		if err != nil {
+			panic(err)
+		}
+
+		var support string
+		for _, info := range plugins.BaseInfo {
+			if info.Name == name {
+				support = info.Support
+			}
+		}
+
+		output[name] = map[string]string{
+			"summary": yaml.Summary,
+			"yaml":    yaml.AdvancedConfigYAML,
+			"support": support,
+		}
+	})
+
+	out, err = json.Marshal(output)
+	if err != nil {
+		panic(err)
+	}
+	fo, err = os.Create("output.json")
+	if err != nil {
+		panic(err)
+	}
+	fo.Write(out)
 
 	// Bloblang stuff
 	doBloblangMethods(docsDir)
