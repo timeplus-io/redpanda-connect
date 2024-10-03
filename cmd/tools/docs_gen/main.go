@@ -108,6 +108,7 @@ func main() {
 
 	input := map[string]any{}
 	output := map[string]any{}
+	drivers := map[string]any{}
 
 	plugins.BaseInfo.Hydrate(service.GlobalEnvironment())
 
@@ -117,14 +118,19 @@ func main() {
 			panic(err)
 		}
 
-		var support string
+		var (
+			support        string
+			commercialName string
+		)
 		for _, info := range plugins.BaseInfo {
-			if info.Name == name {
+			if info.Type == plugins.TypeInput && info.Name == name {
 				support = info.Support
+				commercialName = info.CommercialName
 			}
 		}
 
 		input[name] = map[string]string{
+			"name":    commercialName,
 			"summary": yaml.Summary,
 			"yaml":    yaml.AdvancedConfigYAML,
 			"support": support,
@@ -147,14 +153,19 @@ func main() {
 			panic(err)
 		}
 
-		var support string
+		var (
+			support        string
+			commercialName string
+		)
 		for _, info := range plugins.BaseInfo {
-			if info.Name == name {
+			if info.Type == plugins.TypeOutput && info.Name == name {
 				support = info.Support
+				commercialName = info.CommercialName
 			}
 		}
 
 		output[name] = map[string]string{
+			"name":    commercialName,
 			"summary": yaml.Summary,
 			"yaml":    yaml.AdvancedConfigYAML,
 			"support": support,
@@ -171,24 +182,42 @@ func main() {
 	}
 	fo.Write(out)
 
+	for _, info := range plugins.BaseInfo {
+		if info.Type == plugins.TypeSQLDriver {
+			drivers[info.Name] = map[string]string{
+				"name":    info.CommercialName,
+				"support": info.Support,
+			}
+		}
+	}
+
+	out, err = json.Marshal(drivers)
+	if err != nil {
+		panic(err)
+	}
+	fo, err = os.Create("driver.json")
+	if err != nil {
+		panic(err)
+	}
+	fo.Write(out)
 	// Bloblang stuff
-	doBloblangMethods(docsDir)
-	doBloblangFunctions(docsDir)
+	// doBloblangMethods(docsDir)
+	// doBloblangFunctions(docsDir)
 
-	// Unit test docs
-	doTestDocs(docsDir)
+	// // Unit test docs
+	// doTestDocs(docsDir)
 
-	// HTTP docs
-	doHTTP(docsDir)
+	// // HTTP docs
+	// doHTTP(docsDir)
 
 	// Logger docs
-	doLogger(docsDir)
+	// doLogger(docsDir)
 
 	// Redpanda docs
-	doRedpanda(docsDir)
+	// doRedpanda(docsDir)
 
 	// Template docs
-	doTemplates(docsDir)
+	// doTemplates(docsDir)
 }
 
 func viewForDir(docsDir string) func(string, *service.ConfigView) {
