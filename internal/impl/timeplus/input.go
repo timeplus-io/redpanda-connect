@@ -56,8 +56,9 @@ input:
     username: timeplus
     password: timeplus`)
 
-	inputConfigSpec.Field(service.NewStringField("query")).
-		Field(service.NewURLField("url").Default("tcp://localhost:8463")).
+	inputConfigSpec.
+		Field(service.NewStringField("query").Description("The query to run").Examples("select * from iot", "select count(*) from table(iot)")).
+		Field(service.NewURLField("url").Description("The url should always include schema and host.").Default("tcp://localhost:8463")).
 		Field(service.NewStringField("workspace").Optional().Description("ID of the workspace. Required when reads from Timeplus Enterprise.")).
 		Field(service.NewStringField("apikey").Secret().Optional().Description("The API key. Required when reads from Timeplus Enterprise Cloud")).
 		Field(service.NewStringField("username").Optional().Description("The username. Required when reads from Timeplus Enterprise (self-hosted) or Timeplusd")).
