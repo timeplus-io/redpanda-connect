@@ -17,12 +17,51 @@ var inputConfigSpec *service.ConfigSpec
 
 func init() {
 	inputConfigSpec = service.NewConfigSpec().
-		Summary("Reads messages from Timeplus Enterprise.").
-		Field(service.NewStringField("query")).
-		Field(service.NewURLField("url").Default("tcp://localhost:8463")).
-		Field(service.NewStringField("username")).
-		Field(service.NewStringField("password").Secret())
+		Categories("Services").
+		Summary("Executes a query on Timeplus Enterprise and creates a message from each row received").
+		Description(`
+This input can execute a query on Timeplus Enterprise Cloud, Timeplus Enterprise (self-hosted) or Timeplusd. A structured message will be created
+from each row received.
 
+If it is a streaming query, this input will keep running until the query is terminated. If it is a table query, this input will shuts down once the rows from the query are exhausted.`).
+		Example(
+			"From Timeplus Enterprise Cloud",
+			"You will need to create API Key on Timeplus Enterprise Cloud Web console first and then set the `apikey` field.",
+			`
+input:
+  timeplus:
+    url: https://us-west-2.timeplus.cloud
+    workspace: my_workspace_id
+    query: select * from iot
+    apikey: <Your API Key>`).
+		Example(
+			"From Timeplus Enterprise (self-hosted)",
+			"For self-housted Timeplus Enterprise, you will need to specify the username and password as well as the URL of the App server",
+			`
+output:
+  timeplus:
+    url: http://localhost:8000
+    workspace: my_workspace_id
+    query: select * from iot
+    username: username
+    password: pw`).
+		Example(
+			"From Timeplusd",
+			"Make sure the the schema of url is tcp",
+			`
+input:
+  timeplus:
+    url: tcp://localhost:8463
+    query: select * from iot
+    username: timeplus
+    password: timeplus`)
+
+	inputConfigSpec.Field(service.NewStringField("query")).
+		Field(service.NewURLField("url").Default("tcp://localhost:8463")).
+		Field(service.NewStringField("workspace").Optional().Description("ID of the workspace. Required when reads from Timeplus Enterprise.")).
+		Field(service.NewStringField("apikey").Secret().Optional().Description("The API key. Required when reads from Timeplus Enterprise Cloud")).
+		Field(service.NewStringField("username").Optional().Description("The username. Required when reads from Timeplus Enterprise (self-hosted) or Timeplusd")).
+		Field(service.NewStringField("password").Secret().Optional().Description("The password. Required when reads from Timeplus Enterprise (self-hosted) or Timeplusd"))
 	err := service.RegisterInput(
 		"timeplus", inputConfigSpec, newTimeplusInput)
 	if err != nil {
@@ -42,14 +81,28 @@ func newTimeplusInput(conf *service.ParsedConfig, mgr *service.Resources) (servi
 		return nil, err
 	}
 
-	username, err := conf.FieldString("username")
-	if err != nil {
-		return nil, err
+	var (
+		apikey   string
+		username string
+		password string
+	)
+	if conf.Contains("apikey") {
+		apikey, err = conf.FieldString("apikey")
+		if err != nil {
+			return nil, err
+		}
 	}
-
-	password, err := conf.FieldString("password")
-	if err != nil {
-		return nil, err
+	if conf.Contains("username") {
+		username, err = conf.FieldString("username")
+		if err != nil {
+			return nil, err
+		}
+	}
+	if conf.Contains("password") {
+		password, err = conf.FieldString("password")
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var reader Reader
@@ -57,7 +110,12 @@ func newTimeplusInput(conf *service.ParsedConfig, mgr *service.Resources) (servi
 	if addr.Scheme == "tcp" {
 		reader = driver.NewDriver(logger, addr.Host, username, password)
 	} else {
-		reader = http.NewSSEClient(logger, addr, "test", "test", "hello", username, password)
+		workspace, err := conf.FieldString("workspace")
+		if err != nil {
+			return nil, err
+		}
+
+		reader = http.NewSSEClient(logger, addr, workspace, apikey, username, password)
 	}
 
 	return service.AutoRetryNacks(

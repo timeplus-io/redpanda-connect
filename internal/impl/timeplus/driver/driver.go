@@ -43,9 +43,7 @@ func NewDriver(logger *service.Logger, addr, username, password string) *DriverI
 }
 
 func (d *DriverImpl) Run(ctx context.Context, sql string) error {
-	ckCtx := driver.Context(ctx, driver.WithProgress(func(p *driver.Progress) {
-		// no-op
-	}))
+	ckCtx := driver.Context(ctx)
 	rows, err := d.conn.QueryContext(ckCtx, sql)
 	if err != nil {
 		return err
